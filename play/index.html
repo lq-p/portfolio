@@ -1,0 +1,1200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sunken Halls</title>
+<meta name="description" content="A tiny pixel dungeon that builds itself. Open the gold chests and escape three floors.">
+<meta property="og:title" content="Sunken Halls: can you escape?">
+<meta property="og:description" content="A tiny pixel dungeon that builds itself. Open the gold chests and escape three floors.">
+<!-- stats: GoatCounter (no cookies). allow_frame keeps counting if the game is ever embedded in an iframe -->
+<script>window.goatcounter = {allow_frame: true};</script>
+<script data-goatcounter="https://qwe.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0c0f18; --panel:#141a27; --panel2:#1b2131; --edge:#3e4d6b; --ink:#dcecf3; --dim:#7d92a6;
+    --cyan:#5ad6e8; --blue:#2f74d0; --gold:#f2a54a; --gold2:#ffd08a; --goldDark:#8a4a14;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  body{font-family:'Press Start 2P',ui-monospace,Menlo,Consolas,monospace;color:var(--ink);
+       -webkit-user-select:none;user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent}
+  #game{position:fixed;left:0;top:0;image-rendering:pixelated;image-rendering:crisp-edges}
+  .ui{position:fixed;z-index:2}
+
+  /* HUD */
+  #hud{top:max(12px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));
+       display:flex;flex-direction:column;align-items:flex-start;gap:8px;pointer-events:none}
+  .chip{display:inline-flex;align-items:center;gap:8px;background:rgba(12,15,24,.82);border:2px solid var(--edge);
+        padding:8px 10px;font-size:10px;line-height:1;box-shadow:0 3px 0 rgba(0,0,0,.45)}
+  .gem{width:8px;height:8px;margin-left:6px;background:var(--cyan);transform:rotate(45deg);box-shadow:inset -2px -2px 0 var(--blue)}
+  .box{width:11px;height:9px;margin-left:8px;background:var(--gold);box-shadow:inset 0 -4px 0 #a4521f,inset 0 0 0 1px #3a220f}
+  #seed{color:var(--dim);font-size:8px}
+  #caption{font-size:9px;color:var(--cyan);line-height:1.7;max-width:min(80vw,520px)}
+  #caption small{display:block;color:var(--dim);font-size:8px;margin-top:2px}
+  #btns{top:max(12px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:flex;gap:8px}
+
+  /* buttons */
+  button,.btn{font:inherit;font-size:9px;color:var(--ink);background:var(--panel2);border:2px solid var(--edge);
+         padding:10px 11px;cursor:pointer;box-shadow:0 3px 0 #06080d;line-height:1.3;text-decoration:none;
+         display:inline-block;text-align:center}
+  button:hover,.btn:hover{border-color:var(--cyan)}
+  button:active,.btn:active{transform:translateY(2px);box-shadow:0 1px 0 #06080d}
+  :focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+  .cta{background:var(--gold);color:#1d1206;border-color:var(--gold2);box-shadow:0 3px 0 var(--goldDark)}
+  .cta:hover{border-color:#fff}
+  .cta:active{box-shadow:0 1px 0 var(--goldDark)}
+  .pulse{animation:pulse 1s steps(2) 5}
+  @keyframes pulse{50%{background:#fff3d6;border-color:#fff}}
+
+  #skipWrap{bottom:max(18px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%)}
+  #hint{bottom:max(16px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);font-size:8px;line-height:1.7;
+        color:var(--dim);background:rgba(12,15,24,.82);padding:8px 10px;border:2px solid #263046;white-space:nowrap;
+        transition:opacity .6s;pointer-events:none;text-align:center}
+  #toast{left:50%;top:28%;transform:translateX(-50%);font-size:10px;line-height:1.5;color:#fff;background:rgba(12,15,24,.92);
+         border:2px solid var(--gold);padding:10px 12px;pointer-events:none;transition:opacity .25s;z-index:6;text-align:center;max-width:86vw}
+  #dpad{bottom:max(18px,env(safe-area-inset-bottom));left:max(18px,env(safe-area-inset-left));display:none;
+        grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px);gap:4px}
+  #dpad button{padding:0;opacity:.88;display:flex;align-items:center;justify-content:center}
+  #dpad button i{display:block;width:0;height:0;border:8px solid transparent}
+  #dpad [data-dir=up] i{border-bottom:10px solid var(--ink);border-top:0}
+  #dpad [data-dir=down] i{border-top:10px solid var(--ink);border-bottom:0}
+  #dpad [data-dir=left] i{border-right:10px solid var(--ink);border-left:0}
+  #dpad [data-dir=right] i{border-left:10px solid var(--ink);border-right:0}
+  .touch #dpad{display:grid}
+  .touch #hint,.touch #skipWrap{left:auto;right:max(16px,env(safe-area-inset-right));transform:none}
+  .touch #hint{white-space:normal;max-width:42vw;text-align:right}
+
+  /* overlays */
+  .overlay{position:fixed;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(5,7,12,.62)}
+  .panel{width:100%;max-width:440px;max-height:calc(100vh - 32px);overflow:auto;touch-action:pan-y;background:var(--panel);
+         border:3px solid var(--edge);box-shadow:0 0 0 3px #07090f,0 10px 0 rgba(0,0,0,.45);padding:22px 20px;
+         animation:pop .28s steps(4) both}
+  @keyframes pop{from{transform:scale(.86);opacity:0}to{transform:none;opacity:1}}
+  .kicker{font-size:8px;line-height:1.6;color:var(--cyan);margin:0 0 12px}
+  .panel h2{font-size:14px;line-height:1.5;margin:0 0 12px;color:#fff}
+  .read{font-family:'VT323',ui-monospace,monospace;font-size:22px;line-height:1.1;color:#c4d6e1;margin:0 0 14px;user-select:text;-webkit-user-select:text}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 18px}
+  .tags span{font-size:7px;color:var(--cyan);border:2px solid #2a3a55;padding:5px 6px}
+  .actions{display:flex;flex-wrap:wrap;gap:10px}
+  .actions>*{flex:1 1 auto}
+  .note{font-size:8px;color:var(--dim);line-height:1.8;margin:14px 0 0}
+  .small-link{display:inline-block;font-size:8px;line-height:1.6;color:var(--dim);margin-top:14px;text-underline-offset:4px}
+  .small-link:hover{color:var(--ink)}
+
+  #title{background:rgba(5,7,12,.32)}
+  #title .panel{text-align:center;max-width:480px;background:rgba(20,26,39,.93)}
+  #title h1{font-size:clamp(22px,7vw,34px);line-height:1.25;margin:6px 0 14px;color:var(--cyan);text-shadow:3px 3px 0 #1d4f8a}
+  .by{font-size:9px;line-height:1.8;margin:0 0 20px}
+  .by b{color:var(--gold);font-weight:normal}
+  .play{font-size:14px;padding:15px 30px}
+
+  .list{list-style:none;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:10px}
+  .list li{border:2px solid #263046;padding:10px 12px;background:#10141f}
+  .list li.locked{opacity:.55}
+  .list .t{display:block;font-size:9px;line-height:1.5;color:#fff;margin-bottom:6px}
+  .list .read{font-size:20px;margin:0 0 8px}
+  .list a{font-size:8px;color:var(--gold)}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 16px}
+  .stats div{border:2px solid #263046;padding:10px 4px;text-align:center;font-size:12px;color:#fff}
+  .stats small{display:block;font-size:7px;color:var(--dim);margin-top:8px}
+
+  .hidden{opacity:0!important}
+  .gone{display:none!important}
+  .is-title #hud,.is-title #btns,.is-title #hint,.is-title #dpad,.is-title #skipWrap{display:none!important}
+  @media (max-width:640px){
+    #hud{top:calc(max(12px,env(safe-area-inset-top)) + 46px)}
+    .panel{padding:18px 14px}
+  }
+</style>
+</head>
+<body class="is-title">
+<canvas id="game" aria-label="Pixel-art dungeon game"></canvas>
+
+<div id="hud" class="ui">
+  <div class="chip"><span id="floorLbl">FLOOR 1</span><span class="gem" aria-hidden="true"></span><span id="gemLbl" aria-label="crystals">0</span><span class="box" aria-hidden="true"></span><span id="projLbl" aria-label="treasures found">0/0</span></div>
+  <div id="seed"></div>
+  <div id="caption" aria-live="polite"></div>
+</div>
+
+<div id="btns" class="ui">
+  <button id="musicBtn" type="button">MUSIC ON</button>
+  <button id="soundBtn" type="button">SOUND ON</button>
+  <button id="journalBtn" type="button" class="cta">PORTFOLIO</button>
+</div>
+<div id="skipWrap" class="ui"><button id="skipBtn" type="button">SKIP &gt;&gt;</button></div>
+
+<div id="dpad" class="ui" aria-label="Movement controls">
+  <span></span><button type="button" data-dir="up" aria-label="Move up"><i></i></button><span></span>
+  <button type="button" data-dir="left" aria-label="Move left"><i></i></button><span></span>
+  <button type="button" data-dir="right" aria-label="Move right"><i></i></button>
+  <span></span><button type="button" data-dir="down" aria-label="Move down"><i></i></button><span></span>
+</div>
+
+<div id="hint" class="ui hidden"></div>
+<div id="toast" class="ui hidden" role="status"></div>
+
+<!-- title screen -->
+<div id="title" class="overlay">
+  <div class="panel">
+    <h1>SUNKEN<br>HALLS</h1>
+    <p class="by" id="tBy"></p>
+    <button id="playBtn" class="cta play" type="button">PLAY</button>
+    <p class="note" id="tGoal"></p>
+    <a id="tSkip" class="small-link" href="/">NO TIME? SEE MY WORK &gt;</a>
+  </div>
+</div>
+
+<!-- project found card -->
+<div id="card" class="overlay gone" role="dialog" aria-modal="true" aria-labelledby="cTitle">
+  <div class="panel">
+    <p class="kicker" id="cKicker"></p>
+    <h2 id="cTitle"></h2>
+    <p class="read" id="cBlurb"></p>
+    <div class="tags" id="cTags"></div>
+    <div class="actions">
+      <a id="cView" class="btn cta" href="/">VIEW PROJECT &gt;</a>
+      <button id="cClose" type="button">KEEP EXPLORING</button>
+    </div>
+    <p class="note" id="cNote"></p>
+  </div>
+</div>
+
+<!-- project log -->
+<div id="journal" class="overlay gone" role="dialog" aria-modal="true" aria-labelledby="jTitle">
+  <div class="panel">
+    <p class="kicker" id="jKicker"></p>
+    <h2 id="jTitle"></h2>
+    <p class="read" id="jRole"></p>
+    <ul class="list" id="jList"></ul>
+    <div class="actions">
+      <a id="jPortfolio" class="btn cta" href="/">MY WEBSITE &gt;</a>
+      <a id="jContact" class="btn" href="/"></a>
+    </div>
+    <div class="actions" style="margin-top:10px">
+      <button id="jReveal" type="button">REVEAL ALL</button>
+      <button id="jNew" type="button">NEW MAP</button>
+      <button id="jClose" type="button">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<!-- escape screen -->
+<div id="win" class="overlay gone" role="dialog" aria-modal="true" aria-labelledby="wTitle">
+  <div class="panel">
+    <p class="kicker" id="wKicker"></p>
+    <h2 id="wTitle">YOU ESCAPED THE SUNKEN HALLS</h2>
+    <div class="stats">
+      <div><span id="wGems"></span><small>CRYSTALS</small></div>
+      <div><span id="wProj"></span><small>TREASURES</small></div>
+      <div><span id="wTime"></span><small>TIME</small></div>
+    </div>
+    <p class="read" id="wNote"></p>
+    <div class="actions">
+      <a id="wPortfolio" class="btn cta" href="/">SEE MY PORTFOLIO &gt;</a>
+      <a id="wContact" class="btn" href="/"></a>
+    </div>
+    <div class="actions" style="margin-top:10px">
+      <button id="wShare" type="button">SHARE THE GAME</button>
+      <button id="wMore" type="button">KEEP DIVING</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   EDIT ME: everything the game says about you comes from here.
+   - treasures: one per gold chest. The chest nearest the start holds the
+     first one, so put the page you most want people to see first.
+   ===================================================================== */
+const CONFIG = {
+  name: 'Abdollah Abualhayjaa',
+  shortName: 'Abdollah',
+  role: 'Software engineer in Istanbul. Pega certified System Architect and Senior System Architect, open to graduate and junior roles.',
+  homeUrl: 'https://www.abdollah.tr/',
+  mainUrl: 'https://www.abdollah.tr/work/',      mainLabel: 'SEE MY WORK',
+  contactUrl: 'https://www.abdollah.tr/contact/', contactLabel: 'CONTACT ME',
+  floorsToWin: 3,
+  treasures: [
+    { id: 'work', title: 'My Work',
+      blurb: 'Pega and software engineering work, including an AI virtual customer representative for Kuveyt Türk and a hospital records system on Pega for INOVAR.',
+      tags: ['PEGA','SOFTWARE','IT OPS'], url: 'https://www.abdollah.tr/work/', cta: 'SEE MY WORK >' },
+    { id: 'apps', title: 'My Games & Apps',
+      blurb: 'Eight phone games and apps I made. Gridchoke is out now on Android, and seven more are on the way.',
+      tags: ['ANDROID','IOS','GAMES'], url: 'https://www.abdollah.tr/apps/', cta: 'SEE MY APPS >' },
+    { id: 'book', title: 'A Free 30-Minute Call',
+      blurb: 'Bring a question about Pega exams, landing your first job, publishing a game, or a project you want feedback on. In Arabic, Turkish or English.',
+      tags: ['FREE','30 MIN','AR TR EN'], url: 'https://www.abdollah.tr/book/', cta: 'BOOK A FREE CALL >' },
+    { id: 'contact', title: 'Hire Me',
+      blurb: 'Graduated in 2026, Pega certified, and available to start now. I am looking for roles in Pega, process automation or systems architecture.',
+      tags: ['OPEN TO WORK','ISTANBUL'], url: 'https://www.abdollah.tr/contact/', cta: 'CONTACT ME >' }
+  ]
+};
+CONFIG.projects = CONFIG.treasures;
+
+(() => {
+'use strict';
+
+/* ---------------- constants ---------------- */
+const T = 16;              // tile size in game pixels
+const MW = 56, MH = 38;    // map size in tiles
+const VOID = 0, FLOOR = 1, WALL = 2, WATER = 3, BRIDGE = 4;
+const STEP = 0.14;         // seconds per tile of movement
+const HOLD = 900;          // ms to show the finished map
+const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+const DIRV = {up:[0,-1], down:[0,1], left:[-1,0], right:[1,0]};
+const NPROJ = CONFIG.projects.length;
+
+const C = {
+  void:'#0c0f18', voidEdge:'#07090f',
+  wallTop:'#1b2131', wallTopTex:'#232b3e', wallRim:'#3e4d6b', wallRimHi:'#56698f',
+  mortar:'#151a27', lip:'#5a6d93', lipDark:'#38455f', faceBase:'#10141e',
+  floor:'#8394a0', floorAlt:'#7f909c', seam:'#788995', floorLight:'#9aabb6',
+  floorLine:'#718290', crack:'#647480', shadow:'#627281', shadowDark:'#536270',
+  water:'#1d7290', waterDeep:'#175d77', waterLight:'#2c93ae', waterHi:'#5ad6e8',
+  foam:'#a8f2f7', ledge:'#2c3a4e', ledgeDark:'#1d2737', waterShadow:'#145068',
+  stone:'#8d9ba7', stoneLight:'#adbac3', stoneDark:'#55636f', stoneSeam:'#7a8893',
+  flame0:'#f4fcff', flame1:'#a8e6ff', flame2:'#4fb0f0',
+  crystal0:'#eef6fb', crystal1:'#a9c6dc', crystal2:'#6b9cf0', crystal3:'#3d63c4',
+  sand0:'#e4cb96', sand1:'#c7a26a', sand2:'#97764a',
+  metal:'#3d4a66', metalLight:'#7088b0', chain:'#7c98c2', chainDark:'#4a5d80',
+  gold:'#f2a54a', goldLight:'#ffd08a'
+};
+const BRICK = [['#1f2638','#29324a'], ['#2a344c','#37435f'], ['#35415c','#465572']];
+
+/* ---------------- helpers ---------------- */
+function mulberry32(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function hash(x,y,s){ let h=(Math.imul(x|0,374761393)+Math.imul(y|0,668265263)+Math.imul(s|0,982451653))|0; h=Math.imul(h^(h>>>13),1274126177); h^=h>>>16; return (h>>>0)/4294967296; }
+const clamp01 = v => v<0?0:v>1?1:v;
+function R(g,x,y,w,h,c){ g.fillStyle=c; g.fillRect(x,y,w,h); }
+function outline(g,x,y,w,h,c){ R(g,x,y,w,1,c); R(g,x,y+h-1,w,1,c); R(g,x,y,1,h,c); R(g,x+w-1,y,1,h,c); }
+const store = {
+  get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(_){ return d; } },
+  set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(_){} }
+};
+
+/* ---------------- stats: GoatCounter events (queued until count.js has loaded) ---------------- */
+const Stats = (() => {
+  const q=[]; let timer=null, tries=0;
+  const ready = () => window.goatcounter && typeof window.goatcounter.count==='function';
+  const send = (path,title) => { try{ window.goatcounter.count({path, title:title||path, event:true}); }catch(_){} };
+  function flush(){
+    if(ready()){ while(q.length) send(...q.shift()); clearInterval(timer); timer=null; }
+    else if(++tries>30){ clearInterval(timer); timer=null; q.length=0; }   // blocked by an ad blocker: give up quietly
+  }
+  return { event(path,title){ if(ready()) return send(path,title); q.push([path,title]); if(!timer){ tries=0; timer=setInterval(flush,1000); } } };
+})();
+// every tracked link gets data-gc="click-<page>-from-<place>"; one listener counts them all
+const destSlug = url => { const t=CONFIG.treasures.find(t=>t.url===url); return t ? t.id : url===CONFIG.homeUrl ? 'home' : url===CONFIG.contactUrl ? 'contact' : url===CONFIG.mainUrl ? 'work' : 'link'; };
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('a[data-gc]'); if(!a) return;
+  Stats.event(a.dataset.gc, a.textContent.trim());
+  const sameTab = !a.target || a.target==='_self';
+  if(sameTab && e.button===0 && !(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey) && !/^mailto:|^tel:/i.test(a.href)){
+    e.preventDefault(); const href=a.href; setTimeout(() => { location.href=href; }, 180);   // give the count a moment to send
+  }
+});
+
+/* ---------------- sound: tiny chiptune synth, no audio files ---------------- */
+const SFX = (() => {
+  let ac=null, master=null, comp=null, noiseBuf=null, on=store.get('sh-sound',true);
+  const VOL=0.5;
+  function init(){
+    if(ac) return;
+    const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+    try{ ac=new AC(); }catch(_){ ac=null; return; }
+    master=ac.createGain(); master.gain.value=on?VOL:0;
+    comp=ac.createDynamicsCompressor(); master.connect(comp); comp.connect(ac.destination);
+    noiseBuf=ac.createBuffer(1,Math.floor(ac.sampleRate*0.6),ac.sampleRate);
+    const d=noiseBuf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  }
+  const ok = () => ac && on && ac.state!=='closed';
+  function tone(f,dur,{type='square',vol=0.1,f2=0,delay=0,attack=0.004}={}){
+    if(!ok()) return;
+    const t=ac.currentTime+delay, o=ac.createOscillator(), g=ac.createGain();
+    o.type=type; o.frequency.setValueAtTime(f,t); if(f2) o.frequency.exponentialRampToValueAtTime(f2,t+dur);
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+attack); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t+dur+0.03);
+  }
+  function noise(dur,{vol=0.08,freq=1000,ftype='lowpass',q=0.7,delay=0,f2=0}={}){
+    if(!ok()) return;
+    const t=ac.currentTime+delay, s=ac.createBufferSource(), f=ac.createBiquadFilter(), g=ac.createGain();
+    s.buffer=noiseBuf; s.loop=true; f.type=ftype; f.Q.value=q;
+    f.frequency.setValueAtTime(freq,t); if(f2) f.frequency.exponentialRampToValueAtTime(f2,t+dur);
+    g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    s.connect(f); f.connect(g); g.connect(master); s.start(t,Math.random()*0.4); s.stop(t+dur+0.03);
+  }
+  const SCALE=[262,294,330,392,440,523,587,659,784,880,1047,1175,1319,1568,1760];
+  return {
+    init, isOn:()=>on, ctx:()=>ac, out:()=>comp,
+    resume(){ if(ac && ac.state==='suspended') ac.resume(); },
+    toggle(){ on=!on; store.set('sh-sound',on); if(master) master.gain.setTargetAtTime(on?VOL:0,ac.currentTime,0.02); return on; },
+    start(){ [523,659,784,1047].forEach((f,i)=>tone(f,0.14,{vol:0.09,delay:i*0.07})); },
+    ui(){ tone(880,0.05,{vol:0.05}); },
+    room(n){ tone(SCALE[n%SCALE.length],0.09,{vol:0.06}); },
+    link(k){ tone(k?1320:990,0.05,{type:'triangle',vol:0.05,f2:k?1760:1320}); },
+    dig(){ noise(0.05,{vol:0.05,freq:500+Math.random()*500}); },
+    flood(){ noise(0.9,{vol:0.07,freq:400,f2:1400,ftype:'bandpass',q:1.2}); },
+    ready(){ tone(784,0.12,{type:'triangle',vol:0.1}); tone(1175,0.24,{type:'triangle',vol:0.1,delay:0.1}); },
+    step(bridge){ bridge ? noise(0.04,{vol:0.06,freq:2200,ftype:'bandpass',q:3}) : noise(0.035,{vol:0.035,freq:900+Math.random()*300}); },
+    bump(){ tone(110,0.12,{type:'triangle',vol:0.16,f2:60}); },
+    gem(){ [1319,1760,2093].forEach((f,i)=>tone(f,0.08,{vol:0.07,delay:i*0.045})); },
+    chest(){ noise(0.18,{vol:0.1,freq:500,f2:1800,ftype:'bandpass',q:2}); [523,659,784,1047].forEach((f,i)=>tone(f,0.12,{vol:0.08,delay:0.1+i*0.06})); },
+    project(){
+      const n=[523,659,784,1047,784,1047,1319];
+      n.forEach((f,i)=>tone(f,i===n.length-1?0.45:0.11,{vol:0.09,delay:0.15+i*0.09}));
+      tone(131,0.6,{type:'triangle',vol:0.12,delay:0.15}); tone(196,0.55,{type:'triangle',vol:0.1,delay:0.51});
+    },
+    stairs(){ [784,659,523,392,330,262].forEach((f,i)=>tone(f,0.12,{type:'triangle',vol:0.12,delay:i*0.07})); noise(0.5,{vol:0.05,freq:2000,f2:300}); },
+    drip(){ const f=1400+Math.random()*900; tone(f,0.09,{type:'sine',vol:0.05,f2:f*0.55}); tone(f*1.5,0.05,{type:'sine',vol:0.02,delay:0.12}); },
+    win(){
+      [523,659,784,1047,1319,1568].forEach((f,i)=>tone(f,0.16,{vol:0.08,delay:i*0.1}));
+      [262,330,392,523].forEach(f=>tone(f,1.0,{type:'triangle',vol:0.07,delay:0.62}));
+    },
+    pop(){ tone(1568,0.06,{vol:0.05}); }
+  };
+})();
+
+/* ---------------- music: a calm 8-bar loop in A minor, written as data ----------------
+   Bars 1-4 are arpeggios and bass; bars 5-8 add a bell melody and a soft shaker.
+   Notes are scheduled slightly ahead on the audio clock so timing stays steady. */
+const Music = (() => {
+  let ac=null, out=null, bus=null, wet=null, noiseBuf=null, timer=null, nextT=0, step=0;
+  let on=store.get('sh-music',true);
+  const LEVEL=0.55, BPM=86, E=60/BPM/2;                   // E = one eighth note in seconds
+  const mtof = n => 440*Math.pow(2,(n-69)/12);
+  const CHORDS = [ {b:45,a:[57,60,64,69]},  // Am
+                   {b:41,a:[53,57,60,65]},  // F
+                   {b:38,a:[57,62,65,69]},  // Dm
+                   {b:40,a:[56,59,64,68]} ];// E
+  const ARP = [0,1,2,3,2,1,2,3];
+  const MELODY = [ [[0,76,3],[3,74,1],[4,72,2],[6,71,2]],
+                   [[0,69,4],[4,72,2],[6,74,2]],
+                   [[0,77,3],[3,76,1],[4,74,2],[6,72,2]],
+                   [[0,71,4],[4,68,2],[6,64,2]] ];          // [eighth, midi note, length in eighths]
+  function init(ctx,dest){
+    if(ac || !ctx) return; ac=ctx;
+    out=ac.createGain(); out.gain.value=on?LEVEL:0; out.connect(dest);
+    const lp=ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2400;
+    bus=ac.createGain(); bus.connect(lp); lp.connect(out);
+    // a soft echo gives the "big wet hall" feel
+    const dl=ac.createDelay(1), fb=ac.createGain(), dlf=ac.createBiquadFilter();
+    dl.delayTime.value=E*3; fb.gain.value=0.33; dlf.type='lowpass'; dlf.frequency.value=1500;
+    wet=ac.createGain(); wet.connect(dl); dl.connect(dlf); dlf.connect(fb); fb.connect(dl); dlf.connect(out);
+    noiseBuf=ac.createBuffer(1,Math.floor(ac.sampleRate*0.2),ac.sampleRate);
+    const d=noiseBuf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  }
+  function voice(type,f,t,dur,vol,send,vib){
+    const o=ac.createOscillator(), g=ac.createGain();
+    o.type=type; o.frequency.setValueAtTime(f,t);
+    if(vib){ const l=ac.createOscillator(), lg=ac.createGain(); l.frequency.value=5; lg.gain.value=f*0.006; l.connect(lg); lg.connect(o.frequency); l.start(t); l.stop(t+dur+0.4); }
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+0.012);
+    g.gain.exponentialRampToValueAtTime(vol*0.55,t+dur*0.45); g.gain.exponentialRampToValueAtTime(0.0001,t+dur+0.15);
+    o.connect(g); g.connect(bus);
+    if(send){ const s=ac.createGain(); s.gain.value=send; g.connect(s); s.connect(wet); }
+    o.start(t); o.stop(t+dur+0.2);
+  }
+  function shaker(t){
+    const s=ac.createBufferSource(), f=ac.createBiquadFilter(), g=ac.createGain();
+    s.buffer=noiseBuf; f.type='highpass'; f.frequency.value=6000;
+    g.gain.setValueAtTime(0.025,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.05);
+    s.connect(f); f.connect(g); g.connect(bus); s.start(t); s.stop(t+0.06);
+  }
+  function schedule(s,t){
+    const bar=(s>>3)&7, e=s&7, ch=CHORDS[bar&3], second=bar>=4;
+    voice('square',mtof(ch.a[ARP[e]]),t,E*0.85,0.03,0.25);
+    if(e===0||e===4) voice('triangle',mtof(ch.b),t,E*3.6,0.16,0);
+    if(second){
+      for(const [p,n,l] of MELODY[bar-4]) if(p===e) voice('triangle',mtof(n),t,E*l*0.95,0.075,0.55,true);
+      if(e&1) shaker(t);
+    } else if(e===6 && (bar&1)) voice('sine',mtof(ch.a[3]+12),t,0.5,0.03,0.8);
+  }
+  function tick(){
+    const now=ac.currentTime;
+    if(nextT<now-0.3) nextT=now+0.05;                     // skip ahead after the tab was asleep
+    while(nextT<now+0.2){ schedule(step,nextT); nextT+=E; step=(step+1)&63; }
+  }
+  function start(){ if(!ac || !on || timer) return; nextT=ac.currentTime+0.12; step=0; timer=setInterval(tick,25); }
+  function stop(){ if(timer){ clearInterval(timer); timer=null; } }
+  return {
+    init, start, stop, isOn:()=>on, schedule, E,
+    toggle(){
+      on=!on; store.set('sh-music',on);
+      if(out){ out.gain.setTargetAtTime(on?LEVEL:0,ac.currentTime,0.05); on ? start() : setTimeout(()=>{ if(!on) stop(); },300); }
+      return on;
+    },
+    duck(sec){   // dip the music under fanfares
+      if(!out||!on) return; const t=ac.currentTime;
+      out.gain.cancelScheduledValues(t); out.gain.setTargetAtTime(LEVEL*0.25,t,0.05); out.gain.setTargetAtTime(LEVEL,t+sec,0.4);
+    }
+  };
+})();
+document.addEventListener('visibilitychange',() => {
+  const ac=SFX.ctx(); if(!ac) return;
+  if(document.hidden){ Music.stop(); ac.suspend(); } else { ac.resume(); Music.start(); }
+});
+
+/* ---------------- level generation ---------------- */
+function generate(seed){
+  const rng = mulberry32(seed), ri = (a,b) => a+Math.floor(rng()*(b-a+1));
+  const grid = new Uint8Array(MW*MH);
+  const I = (x,y) => y*MW+x;
+  const G = (x,y) => (x<0||y<0||x>=MW||y>=MH) ? VOID : grid[y*MW+x];
+  const open = v => v===FLOOR||v===WATER||v===BRIDGE;
+  const walk = v => v===FLOOR||v===BRIDGE;
+
+  // 1. rooms: random rectangles that keep a gap of 3 tiles between each other
+  const rooms = [];
+  for(let n=0; n<2000 && rooms.length<14; n++){
+    const w=ri(7,12), h=ri(6,9), x=ri(2,MW-w-2), y=ri(3,MH-h-2);
+    if(rooms.some(o => x-3<o.x+o.w && x+w+3>o.x && y-3<o.y+o.h && y+h+3>o.y)) continue;
+    rooms.push({x,y,w,h,cx:x+(w>>1)-1,cy:y+(h>>1)-1});
+  }
+  for(const r of rooms) for(let y=r.y;y<r.y+r.h;y++) for(let x=r.x;x<r.x+r.w;x++) grid[I(x,y)]=FLOOR;
+
+  // 2. candidate links: each room to its 3 nearest rooms
+  const D = (a,b) => Math.hypot(a.cx-b.cx, a.cy-b.cy);
+  const key = (a,b) => a<b ? a+','+b : b+','+a;
+  const links = new Map();
+  const addLink = (i,j,d) => { const k=key(i,j); if(!links.has(k)) links.set(k,{a:Math.min(i,j),b:Math.max(i,j),d}); };
+  rooms.forEach((a,i) => {
+    rooms.map((b,j)=>[j,D(a,b)]).filter(p=>p[0]!==i).sort((p,q)=>p[1]-q[1]).slice(0,3).forEach(([j,d])=>addLink(i,j,d));
+  });
+
+  // 3. minimum spanning tree (Prim) guarantees every room is reachable
+  const inT = rooms.map((_,i)=>i===0), tree = [];
+  for(let n=1; n<rooms.length; n++){
+    let best=null;
+    for(let i=0;i<rooms.length;i++) if(inT[i]) for(let j=0;j<rooms.length;j++) if(!inT[j]){
+      const d=D(rooms[i],rooms[j]); if(!best||d<best.d) best={a:i,b:j,d};
+    }
+    inT[best.b]=true; tree.push(best); addLink(best.a,best.b,best.d);
+  }
+  const treeKeys = new Set(tree.map(e=>key(e.a,e.b)));
+  const cand = [...links.values()].sort((p,q)=>p.d-q.d);
+  const extra = cand.filter(e => !treeKeys.has(key(e.a,e.b)) && rng()<0.22); // a few loops so it isn't all dead ends
+
+  // 4. corridors: 2-wide L-shaped tunnels between linked rooms
+  const carved = [];
+  const carve = (x,y) => { if(x<1||y<2||x>MW-2||y>MH-2) return; const i=I(x,y); if(grid[i]===VOID){ grid[i]=FLOOR; carved.push(x,y); } };
+  const brush = (x,y) => { carve(x,y); carve(x+1,y); carve(x,y+1); carve(x+1,y+1); };
+  for(const e of [...tree,...extra]){
+    const a=rooms[e.a], b=rooms[e.b]; let x=a.cx, y=a.cy;
+    const hx = () => { while(x!==b.cx){ x+=Math.sign(b.cx-x); brush(x,y); } };
+    const vy = () => { while(y!==b.cy){ y+=Math.sign(b.cy-y); brush(x,y); } };
+    if(rng()<0.5){ hx(); vy(); } else { vy(); hx(); }
+  }
+
+  // 5a. pools with a bridge, inset 2 tiles so a walkway always rings them
+  const bridgeDir = new Map(); let pools = 0;
+  rooms.forEach((r,i) => {
+    if(i===0 || r.w<7 || r.h<7 || rng()>0.8) return;
+    const px=r.x+2, py=r.y+2, pw=r.w-4, ph=r.h-4;
+    for(let y=py;y<py+ph;y++) for(let x=px;x<px+pw;x++) grid[I(x,y)]=WATER;
+    if(rng()<0.5){ const y=py+(ph>>1); for(let x=px;x<px+pw;x++){ grid[I(x,y)]=BRIDGE; bridgeDir.set(I(x,y),'h'); } }
+    else         { const x=px+(pw>>1); for(let y=py;y<py+ph;y++){ grid[I(x,y)]=BRIDGE; bridgeDir.set(I(x,y),'v'); } }
+    r.pool=true; pools++;
+  });
+
+  // 5b. walls around everything open, plus a cap above each wall face for height
+  for(let y=0;y<MH;y++) for(let x=0;x<MW;x++){
+    if(grid[I(x,y)]!==VOID) continue;
+    search: for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++) if(open(G(x+dx,y+dy))){ grid[I(x,y)]=WALL; break search; }
+  }
+  for(let y=1;y<MH;y++) for(let x=0;x<MW;x++)
+    if(grid[I(x,y)]===WALL && open(G(x,y+1)) && grid[I(x,y-1)]===VOID) grid[I(x,y-1)]=WALL;
+
+  // start in room 0, stairs in the room furthest away by walking distance
+  const r0 = rooms[0], start = {x:r0.cx, y:r0.cy};
+  const dist = new Int16Array(MW*MH).fill(-1), q=[I(start.x,start.y)]; dist[q[0]]=0;
+  for(let h=0; h<q.length; h++){
+    const c=q[h], cx=c%MW, cy=(c/MW)|0;
+    for(const [dx,dy] of DIRS){ const nx=cx+dx, ny=cy+dy; if(walk(G(nx,ny)) && dist[I(nx,ny)]<0){ dist[I(nx,ny)]=dist[c]+1; q.push(I(nx,ny)); } }
+  }
+  let far=null, fd=-1;
+  rooms.forEach((r,i) => { if(i===0) return; const d=dist[I(r.x+1,r.y+1)]; if(d>fd){ fd=d; far=r; } });
+  let stairs=null;
+  if(far){
+    const mid=far.x+(far.w>>1), opts=[];
+    for(let x=far.x+1;x<far.x+far.w-1;x++) if(G(x,far.y)===FLOOR && G(x,far.y-1)===WALL) opts.push(x);
+    if(opts.length){ opts.sort((a,b)=>Math.abs(a-mid)-Math.abs(b-mid)); stairs={x:opts[0],y:far.y}; }
+    else stairs={x:far.x+1,y:far.y+1};
+  } else stairs={x:r0.x+r0.w-2,y:r0.y+r0.h-2};
+
+  // decorations
+  const decor = new Map(), wallDecor = new Map();
+  const isSpecial = (x,y) => (x===start.x&&y===start.y)||(x===stairs.x&&y===stairs.y);
+  const free = (x,y) => G(x,y)===FLOOR && !decor.has(I(x,y)) && !isSpecial(x,y);
+  const nearWall = (x,y) => G(x-1,y)===WALL||G(x+1,y)===WALL||G(x,y-1)===WALL||G(x,y+1)===WALL;
+  // chests sit against a room's top wall; the walkway below keeps every path open
+  const tryChest = r => {
+    for(let k=0;k<12;k++){
+      const x=ri(r.x+2,r.x+r.w-3), y=r.y;
+      if(free(x,y) && G(x,y-1)===WALL && !decor.has(I(x-1,y)) && !decor.has(I(x+1,y))){
+        decor.set(I(x,y),{type:'chest',x,y,block:true,open:false,dist:dist[I(x,y+1)]}); r.chest=true; return true;
+      }
+    }
+    return false;
+  };
+  rooms.forEach(r => {
+    // braziers only in dead corners (two walls touching) so they never block a path
+    for(const [x,y,ax,ay,bx,by] of [[r.x,r.y,0,-1,-1,0],[r.x+r.w-1,r.y,0,-1,1,0],[r.x,r.y+r.h-1,0,1,-1,0],[r.x+r.w-1,r.y+r.h-1,0,1,1,0]])
+      if(rng()<0.7 && free(x,y) && G(x+ax,y+ay)===WALL && G(x+bx,y+by)===WALL) decor.set(I(x,y),{type:'brazier',x,y,block:true,ph:rng()*10});
+    if(rng()<0.45) tryChest(r);
+    for(let k=0,n=ri(1,3),p=0; k<25&&p<n; k++){ const x=ri(r.x,r.x+r.w-1), y=ri(r.y,r.y+r.h-1); if(free(x,y)){ decor.set(I(x,y),{type:'crystal',x,y,ph:rng()*6,blue:rng()<0.5}); p++; } }
+    for(let k=0,n=ri(1,3),p=0; k<25&&p<n; k++){ const x=ri(r.x,r.x+r.w-1), y=ri(r.y,r.y+r.h-1); if(free(x,y)&&nearWall(x,y)){ decor.set(I(x,y),{type:'rubble',x,y,v:rng()}); p++; } }
+    if(rng()<0.5) for(let k=0;k<10;k++){ const x=ri(r.x+1,r.x+r.w-2), y=ri(r.y+1,r.y+r.h-2); if(free(x,y)){ decor.set(I(x,y),{type:'grate',x,y}); break; } }
+  });
+  // make sure every floor has at least 3 chests, so there is always a project to find
+  let nChest=0; decor.forEach(d=>{ if(d.type==='chest') nChest++; });
+  for(const r of rooms){ if(nChest>=3) break; if(!r.chest && tryChest(r)) nChest++; }
+  for(let i=0;i<carved.length;i+=2){
+    const x=carved[i], y=carved[i+1]; if(!free(x,y)) continue; const v=rng();
+    if(v<0.025) decor.set(I(x,y),{type:'crystal',x,y,ph:rng()*6,blue:rng()<0.5});
+    else if(v<0.06 && nearWall(x,y)) decor.set(I(x,y),{type:'rubble',x,y,v:rng()});
+  }
+  for(let y=0;y<MH;y++) for(let x=0;x<MW;x++){
+    if(G(x,y)!==WALL || G(x,y+1)!==FLOOR) continue;
+    const v=rng();
+    if(v<0.13 && !wallDecor.has(I(x-1,y)) && !wallDecor.has(I(x-2,y))) wallDecor.set(I(x,y),'torch');
+    else if(v<0.22 && !wallDecor.has(I(x-1,y))) wallDecor.set(I(x,y),'chain');
+  }
+
+  const lights=[]; let totalGems=0;
+  decor.forEach(d => {
+    if(d.type==='brazier') lights.push({x:d.x*T+8,y:d.y*T+3,r:54,g:26,ph:d.ph});
+    if(d.type==='crystal') totalGems++;
+    if(d.type==='chest') totalGems+=3;
+  });
+  wallDecor.forEach((t,i) => { if(t==='torch') lights.push({x:(i%MW)*T+8,y:((i/MW)|0)*T+5,r:46,g:20,ph:hash(i,0,3)*10}); });
+  lights.push({x:stairs.x*T+8,y:stairs.y*T+8,r:34,g:16,ph:0});
+
+  return {seed,grid,I,G,rooms,cand,tree,extra,carved,pools,bridgeDir,start,stairs,decor,wallDecor,lights,totalGems};
+}
+
+/* ---------------- static map painting (done once per level) ---------------- */
+const mc = document.createElement('canvas'); mc.width=MW*T; mc.height=MH*T;
+const m = mc.getContext('2d');
+const isOpen = v => v===FLOOR||v===WATER||v===BRIDGE;
+
+function paintFloor(L,x,y){
+  const X=x*T, Y=y*T, G=L.G, h=hash(x,y,L.seed);
+  R(m,X,Y,T,T,h<0.5?C.floor:C.floorAlt);
+  R(m,X,Y+15,T,1,C.seam); R(m,X+15,Y,1,T,C.seam);
+  if(h>0.86){ const bx=X+2+((h*977)|0)%5, by=Y+2+((h*531)|0)%6; outline(m,bx,by,7,4,C.floorLine); outline(m,bx+3,by+3,7,4,C.floorLine); }
+  if(h>0.42&&h<0.52){ const bx=X+3+((h*713)|0)%6, by=Y+5+((h*291)|0)%5;
+    for(const [dx,dy] of [[0,0],[1,0],[2,1],[3,1],[4,2],[4,3],[5,3]]) R(m,bx+dx,by+dy,1,1,C.crack); }
+  if(h<0.35){ R(m,X+1+((h*2113)|0)%14,Y+1+((h*1571)|0)%14,1,1,C.floorLight); }
+  if(G(x,y-1)===WALL){ R(m,X,Y,T,4,C.shadow); R(m,X,Y,T,2,C.shadowDark); }
+  if(G(x-1,y)===WALL){ R(m,X,Y,2,T,C.shadow); }
+  if(G(x,y+1)===WATER){ R(m,X,Y+15,T,1,C.floorLight); }
+}
+function paintFace(L,x,y){
+  const X=x*T, Y=y*T;
+  R(m,X,Y,T,T,C.mortar);
+  R(m,X,Y,T,2,C.lip); R(m,X,Y+2,T,1,C.lipDark);
+  for(let r=0;r<3;r++){
+    const by=Y+3+r*4, off=((r+y)%2)*4;
+    for(let bx=-8;bx<16;bx+=8){
+      const sx=X+bx+off, hh=hash(x*4+((bx+8)>>3),y*3+r,L.seed+5);
+      const pair=hh<0.25?BRICK[0]:hh<0.8?BRICK[1]:BRICK[2];
+      const x0=Math.max(sx,X), x1=Math.min(sx+7,X+16);
+      if(x1>x0){ R(m,x0,by,x1-x0,3,pair[0]); R(m,x0,by,x1-x0,1,pair[1]); }
+    }
+  }
+  R(m,X,Y+15,T,1,C.faceBase);
+}
+function paintTop(L,x,y){
+  const X=x*T, Y=y*T, G=L.G, h=hash(x,y,L.seed+9);
+  R(m,X,Y,T,T,C.wallTop);
+  if(h<0.6) R(m,X+2+((h*977)|0)%11,Y+2+((h*577)|0)%11,3,1,C.wallTopTex);
+  if(h<0.3) R(m,X+2+((h*377)|0)%12,Y+2+((h*137)|0)%12,1,2,C.wallTopTex);
+  const n=G(x,y-1), s=G(x,y+1), w=G(x-1,y), e=G(x+1,y);
+  if(n===VOID) R(m,X,Y,T,1,C.voidEdge);
+  if(s===VOID) R(m,X,Y+15,T,1,C.voidEdge);
+  if(w===VOID) R(m,X,Y,1,T,C.voidEdge);
+  if(e===VOID) R(m,X+15,Y,1,T,C.voidEdge);
+  if(isOpen(n)){ R(m,X,Y,T,2,C.wallRim); R(m,X,Y,T,1,C.wallRimHi); }
+  if(isOpen(w)){ R(m,X,Y,2,T,C.wallRim); R(m,X,Y,1,T,C.wallRimHi); }
+  if(isOpen(e)){ R(m,X+14,Y,2,T,C.wallRim); R(m,X+15,Y,1,T,C.wallRimHi); }
+}
+function paintWater(L,x,y){
+  const X=x*T, Y=y*T, G=L.G;
+  R(m,X,Y,T,T,C.water);
+  for(let k=0;k<3;k++){ const hh=hash(x*3+k,y,L.seed+11); R(m,X+((hh*12)|0),Y+5+k*4+((hh*3)|0),3+((hh*4)|0),1,hh<0.5?C.waterDeep:C.waterLight); }
+  const n=G(x,y-1), s=G(x,y+1), w=G(x-1,y), e=G(x+1,y);
+  if(w===FLOOR) R(m,X,Y,1,T,C.waterHi);
+  if(e===FLOOR) R(m,X+15,Y,1,T,C.waterHi);
+  if(s===FLOOR) R(m,X,Y+15,T,1,C.waterHi);
+  if(w===BRIDGE) R(m,X,Y,2,T,C.waterShadow);
+  if(n===FLOOR){ R(m,X,Y,T,4,C.ledge); R(m,X,Y+3,T,1,C.ledgeDark); R(m,X,Y+4,T,1,C.foam); R(m,X,Y+5,T,1,C.waterHi); }
+  else if(n===BRIDGE && L.bridgeDir.get(L.I(x,y-1))==='h') R(m,X,Y,T,3,C.waterShadow);
+}
+function paintBridge(L,x,y){
+  const X=x*T, Y=y*T, dir=L.bridgeDir.get(L.I(x,y));
+  R(m,X,Y,T,T,C.water);
+  if(dir==='h'){
+    R(m,X,Y+2,T,10,C.stone); R(m,X,Y+2,T,1,C.stoneLight);
+    R(m,X,Y+12,T,3,C.stoneDark); R(m,X+5,Y+13,6,2,'#2a3644'); R(m,X,Y+15,T,1,C.waterShadow);
+    for(let sx=3;sx<16;sx+=5) R(m,X+sx,Y+3,1,9,C.stoneSeam);
+  } else {
+    R(m,X+3,Y,10,T,C.stone); R(m,X+3,Y,1,T,C.stoneLight); R(m,X+12,Y,1,T,C.stoneDark); R(m,X+13,Y,2,T,C.waterShadow);
+    for(let sy=3;sy<16;sy+=5) R(m,X+4,Y+sy,8,1,C.stoneSeam);
+  }
+}
+function paintStairs(x,y){
+  const X=x*T, Y=y*T, steps=['#9aabb6','#7f909c','#627281','#45525f','#2a3442'];
+  R(m,X,Y,T,T,'#3a4658');
+  for(let i=0;i<5;i++){ R(m,X+2,Y+1+i*3,12,3,steps[i]); R(m,X+2,Y+3+i*3,12,1,'#1d2533'); }
+  R(m,X+1,Y,1,T,C.stoneDark); R(m,X+14,Y,1,T,C.stoneDark); R(m,X+2,Y,12,1,C.stoneLight);
+}
+function paintRubble(d){
+  const X=d.x*T, Y=d.y*T, ox=3+((d.v*4)|0), oy=6+((d.v*137)|0)%5;
+  R(m,X+ox+1,Y+oy,4,1,C.sand0); R(m,X+ox,Y+oy+1,6,1,C.sand0); R(m,X+ox,Y+oy+2,6,1,C.sand1);
+  R(m,X+ox-1,Y+oy+3,8,1,C.sand1); R(m,X+ox-1,Y+oy+4,8,1,C.sand2);
+  R(m,X+ox+8,Y+oy+3,2,1,C.sand1); R(m,X+ox+8,Y+oy+4,2,1,C.sand2);
+}
+function paintGrate(d){
+  const X=d.x*T+3, Y=d.y*T+3;
+  R(m,X+1,Y,8,10,C.metal); R(m,X,Y+1,10,8,C.metal); R(m,X+2,Y+2,6,6,'#141a26');
+  for(let i=0;i<3;i++) R(m,X+3+i*2,Y+2,1,6,C.metalLight);
+  R(m,X+1,Y,8,1,C.metalLight);
+}
+function paintBrazier(d){
+  const X=d.x*T, Y=d.y*T;
+  R(m,X+4,Y+14,8,2,'#56656f');
+  R(m,X+6,Y+9,4,6,C.stone); R(m,X+9,Y+9,1,6,C.stoneDark); R(m,X+5,Y+14,6,1,C.stoneDark);
+  R(m,X+3,Y+7,10,2,C.metal); R(m,X+3,Y+7,10,1,C.metalLight); R(m,X+4,Y+9,8,1,'#1c2233');
+}
+function paintTorch(x,y){ const X=x*T, Y=y*T; R(m,X+6,Y+8,4,1,C.metal); R(m,X+6,Y+9,4,1,C.metalLight); R(m,X+7,Y+10,2,3,C.metal); }
+function paintChain(x,y){
+  const X=x*T, Y=y*T;
+  for(let i=0;i<=12;i++){ const py=Y+3+Math.round(4*Math.sin(Math.PI*i/12)); R(m,X+2+i,py,1,1,i%2?C.chainDark:C.chain); }
+  R(m,X+1,Y+3,2,1,C.metalLight); R(m,X+14,Y+3,2,1,C.metalLight);
+}
+function paintMap(L){
+  R(m,0,0,MW*T,MH*T,C.void);
+  for(let y=0;y<MH;y++) for(let x=0;x<MW;x++){
+    const v=L.G(x,y);
+    if(v===FLOOR) paintFloor(L,x,y);
+    else if(v===WALL) (isOpen(L.G(x,y+1)) ? paintFace : paintTop)(L,x,y);
+    else if(v===WATER) paintWater(L,x,y);
+    else if(v===BRIDGE) paintBridge(L,x,y);
+  }
+  paintStairs(L.stairs.x,L.stairs.y);
+  L.decor.forEach(d => { if(d.type==='rubble') paintRubble(d); else if(d.type==='grate') paintGrate(d); else if(d.type==='brazier') paintBrazier(d); });
+  L.wallDecor.forEach((t,i) => { const x=i%MW, y=(i/MW)|0; t==='torch' ? paintTorch(x,y) : paintChain(x,y); });
+}
+
+/* ---------------- player sprite ---------------- */
+const PAL = {k:'#141019',h:'#f2a54a',o:'#d9792f',d:'#a4521f',f:'#241a2b',e:'#dff7ff',b:'#5a3826',g:'#e4cb96',l:'#3d4a66',y:'#ffe39a',t:'#2a2436'};
+const P_A = [
+  '................',
+  '......kkkk......',
+  '.....khhhhk.....',
+  '....khhhhhok....',
+  '....khffffok....',
+  '....kheffeok....',
+  '....khffffok....',
+  '...kkooooookk...',
+  '..kdoooooooodk..',
+  '..kdobbgbboodk.l',
+  '..kdoooooooodlyl',
+  '...kdooooooodlyl',
+  '...kdddddddk.lll',
+  '....kttkkttk....',
+  '................',
+  '................'
+];
+const P_B = P_A.slice(); P_B[13] = '.....kttkttk....';
+function sprite(rows,flip){
+  const c=document.createElement('canvas'); c.width=c.height=16; const g=c.getContext('2d');
+  rows.forEach((row,y) => [...row].forEach((ch,x) => { if(ch!=='.'&&PAL[ch]) R(g,flip?15-x:x,y,1,1,PAL[ch]); }));
+  return c;
+}
+const SPR = {r:[sprite(P_A),sprite(P_B)], l:[sprite(P_A,true),sprite(P_B,true)]};
+
+/* ---------------- canvases, sizing ---------------- */
+const cv=document.getElementById('game'), ctx=cv.getContext('2d');
+const lc=document.createElement('canvas'), lx=lc.getContext('2d');
+let iw=320, ih=180, scale=3;
+function resize(){
+  const W=window.innerWidth, H=window.innerHeight;
+  scale=Math.max(2,Math.floor(Math.min(W,H)/(13*T)));
+  iw=Math.ceil(W/scale); ih=Math.ceil(H/scale);
+  cv.width=iw; cv.height=ih; cv.style.width=iw*scale+'px'; cv.style.height=ih*scale+'px';
+  lc.width=iw; lc.height=ih;
+  ctx.imageSmoothingEnabled=false;
+}
+window.addEventListener('resize',resize); resize();
+
+/* ---------------- state ---------------- */
+const $ = id => document.getElementById(id);
+const floorLbl=$('floorLbl'), gemLbl=$('gemLbl'), projLbl=$('projLbl'), seedEl=$('seed'), capEl=$('caption');
+const skipBtn=$('skipBtn'), skipWrap=$('skipWrap'), soundBtn=$('soundBtn'), journalBtn=$('journalBtn'), hint=$('hint'), toastEl=$('toast');
+let L=null, floorN=1, gems=0, mode='gen', genT=0, genSpeed=1, phases=[], total=0, time=0, moved=false;
+let attract=true, overlay='title', won=false, runTime=0, revealAll=false, lastBump=-1, dripT=3, toastT=0;
+let fade=null, parts=[], capKey='';
+const found = new Set(store.get('sh-found',[]).filter(t => CONFIG.projects.some(p=>p.title===t)));
+const player={x:0,y:0,fx:0,fy:0,tx:0,ty:0,t:1,moving:false,face:'r',frame:0,bump:0,bdx:0,bdy:0};
+const cam={x:0,y:0};
+const held=[];
+const genSfx={p:-1,n:0,dig:0};
+
+const randSeed = () => 10000+Math.floor(Math.random()*89999);
+const qs=new URLSearchParams(location.search), qseed=parseInt(qs.get('seed'),10);
+let firstSeed = Number.isFinite(qseed)&&qseed>0 ? qseed : null;
+
+function assignProjects(L){
+  const remaining = CONFIG.projects.filter(p=>!found.has(p.title));
+  const chests=[]; L.decor.forEach(d=>{ if(d.type==='chest') chests.push(d); });
+  chests.sort((a,b)=>(a.dist<0?1e9:a.dist)-(b.dist<0?1e9:b.dist));    // nearest chest gets your best project
+  chests.forEach((d,i)=>{ d.project = i<remaining.length ? remaining[i] : null; });
+  L.projChests = Math.min(chests.length, remaining.length);
+}
+function buildPhases(L){
+  const last = L.projChests ? `${L.pools} POOLS, ${L.projChests} GOLD CHEST${L.projChests>1?'S':''}` : `${L.pools} POOLS, ${L.totalGems} CRYSTALS`;
+  return [
+    {name:'PLACING ROOMS',          stat:`${L.rooms.length} ROOMS, NO OVERLAPS`,                 dur:Math.max(1100,L.rooms.length*130)},
+    {name:'LINKING NEAREST ROOMS',  stat:`${L.cand.length} POSSIBLE LINKS`,                      dur:1200},
+    {name:'SPANNING TREE + LOOPS',  stat:`${L.tree.length} TREE LINKS + ${L.extra.length} LOOPS`, dur:1700},
+    {name:'DIGGING CORRIDORS',      stat:`${L.carved.length/2} TILES DUG`,                       dur:1800},
+    {name:'WATER, WALLS + TREASURE',stat:last,                                                  dur:1500}
+  ];
+}
+function phaseAt(t){
+  let a=0;
+  for(let i=0;i<phases.length;i++){ const d=phases[i].dur; if(t<a+d) return {p:i,u:(t-a)/d}; a+=d; }
+  return {p:phases.length,u:clamp01((t-a)/HOLD)};
+}
+function updateHud(){
+  floorLbl.textContent='FLOOR '+floorN; gemLbl.textContent=gems; projLbl.textContent=found.size+'/'+NPROJ;
+  seedEl.textContent='SEED '+L.seed;
+}
+function setCaption(text,sub){ const k=text+'|'+sub; if(k===capKey) return; capKey=k; capEl.innerHTML=''; if(text){ capEl.append(text); const s=document.createElement('small'); s.textContent=sub||''; capEl.append(s); } }
+function toast(msg){ toastEl.textContent=msg; toastEl.classList.remove('hidden'); toastT=1.8; }
+function setLink(a,url,from,sameTab){
+  url=url||CONFIG.homeUrl; a.href=url;
+  if(sameTab || /^mailto:|^tel:/i.test(url)) a.removeAttribute('target'); else { a.target='_blank'; a.rel='noopener'; }
+  if(from) a.dataset.gc=`click-${destSlug(url)}-from-${from}`;
+}
+
+function newLevel(seed){
+  L=generate(seed>>>0); assignProjects(L); paintMap(L);
+  phases=buildPhases(L); total=phases.reduce((a,p)=>a+p.dur,0)+HOLD; genT=0; mode='gen';
+  Object.assign(player,{x:L.start.x,y:L.start.y,fx:L.start.x,fy:L.start.y,tx:L.start.x,ty:L.start.y,t:1,moving:false,bump:0});
+  parts=[]; genSfx.p=-1; skipWrap.classList.remove('gone'); hint.classList.add('hidden'); updateHud();
+}
+function enterPlay(){
+  mode='play'; const [tx,ty]=camTarget(); cam.x=tx; cam.y=ty;
+  setCaption('',''); skipWrap.classList.add('gone'); if(!moved) hint.classList.remove('hidden');
+}
+function startFade(mid){ if(fade) return; fade={t:0,mid,done:false}; }
+
+/* ---------------- overlays ---------------- */
+function openOverlay(id){ if(overlay) $(overlay).classList.add('gone'); overlay=id; $(id).classList.remove('gone'); held.length=0; }
+function closeOverlay(silent){ if(!overlay) return; $(overlay).classList.add('gone'); overlay=null; if(!silent) SFX.ui(); }
+
+function setupTitle(){
+  const by=$('tBy'); by.textContent='A TINY DUNGEON BY '; const b=document.createElement('b'); b.textContent=CONFIG.name; by.append(b);
+  $('tGoal').textContent = found.size>0 && found.size<NPROJ ? `WELCOME BACK. ${found.size} OF ${NPROJ} TREASURES FOUND`
+                         : `FIND ${NPROJ} GOLD CHESTS. ESCAPE ${CONFIG.floorsToWin} FLOORS.`;
+  const sk=$('tSkip'); setLink(sk,CONFIG.mainUrl,'title',true); sk.textContent=`NO TIME? ${CONFIG.mainLabel} >`;
+}
+function startGame(){
+  if(overlay!=='title') return;
+  SFX.init(); SFX.resume(); SFX.start(); Stats.event('play','Pressed PLAY');
+  Music.init(SFX.ctx(),SFX.out()); setTimeout(()=>Music.start(),500);
+  closeOverlay(true); document.body.classList.remove('is-title');
+  attract=false; floorN=1; gems=0; runTime=0; won=false; genSpeed=1;
+  startFade(() => { newLevel(firstSeed || randSeed()); firstSeed=null; });
+}
+function showProject(p){
+  SFX.project(); Music.duck(2.2);
+  $('cKicker').textContent=`TREASURE FOUND · ${found.size} OF ${NPROJ}`;
+  $('cTitle').textContent=p.title; $('cBlurb').textContent=p.blurb||'';
+  $('cTags').replaceChildren(...(p.tags||[]).map(t=>{ const s=document.createElement('span'); s.textContent=t; return s; }));
+  const view=$('cView'); setLink(view,p.url,'chest'); view.textContent=p.cta||'TAKE A LOOK >';
+  const left=NPROJ-found.size;
+  $('cNote').textContent = left ? `${left} MORE GOLD CHEST${left>1?'S':''} TO FIND.` + (document.body.classList.contains('touch') ? '' : ' ARROW KEYS TO CARRY ON.') : 'THAT WAS THE LAST ONE. YOU FOUND EVERYTHING!';
+  openOverlay('card'); setTimeout(()=>view.focus({preventScroll:true}),60);
+}
+function openJournal(){
+  SFX.ui();
+  $('jKicker').textContent=`${found.size} OF ${NPROJ} TREASURES FOUND`;
+  $('jTitle').textContent=CONFIG.name; $('jRole').textContent=CONFIG.role;
+  $('jList').replaceChildren(...CONFIG.projects.map(p => {
+    const li=document.createElement('li'), t=document.createElement('span'), r=document.createElement('p');
+    t.className='t'; r.className='read';
+    if(found.has(p.title)||revealAll){
+      t.textContent=p.title; r.textContent=p.blurb||'';
+      const a=document.createElement('a'); a.textContent=p.cta||'TAKE A LOOK >'; setLink(a,p.url,'log');
+      li.append(t,r,a);
+    } else { li.className='locked'; t.textContent='? ? ?'; r.textContent='Hidden in a chest somewhere in the halls.'; li.append(t,r); }
+    return li;
+  }));
+  setLink($('jPortfolio'),CONFIG.homeUrl,'log');
+  const jc=$('jContact'); setLink(jc,CONFIG.contactUrl,'log'); jc.textContent=CONFIG.contactLabel;
+  $('jReveal').classList.toggle('gone', revealAll || found.size===NPROJ);
+  openOverlay('journal');
+}
+function showWin(){
+  const best=Math.max(store.get('sh-best',0),gems); store.set('sh-best',best);
+  const s=Math.floor(runTime);
+  $('wKicker').textContent=`FLOOR ${CONFIG.floorsToWin} CLEARED`;
+  $('wGems').textContent=gems; $('wProj').textContent=found.size+'/'+NPROJ; $('wTime').textContent=Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+  $('wNote').textContent = found.size<NPROJ
+    ? `You opened ${found.size} of ${NPROJ} gold chests. Everything else is on my site, no chests required.`
+    : `You found every treasure. Thanks for playing! Best run: ${best} crystals.`;
+  const wp=$('wPortfolio'); setLink(wp,CONFIG.mainUrl,'win',true); wp.textContent=CONFIG.mainLabel+' >';
+  const wc=$('wContact'); setLink(wc,CONFIG.contactUrl,'win'); wc.textContent=CONFIG.contactLabel;
+  Stats.event('escaped',`Escaped floor ${CONFIG.floorsToWin}`);
+  SFX.win(); Music.duck(3); openOverlay('win'); setTimeout(()=>wp.focus({preventScroll:true}),60);
+}
+async function share(){
+  Stats.event('share','Pressed SHARE');
+  const url=location.origin+location.pathname;
+  const text=`I escaped ${CONFIG.shortName}'s dungeon with ${gems} crystals. Your turn:`;
+  try{ if(navigator.share){ await navigator.share({title:'Sunken Halls',text,url}); return; } }catch(_){ return; }
+  try{ await navigator.clipboard.writeText(text+' '+url); toast('LINK COPIED'); }catch(_){ toast(url); }
+  SFX.pop();
+}
+
+/* ---------------- input ---------------- */
+const KEYS={ArrowUp:'up',KeyW:'up',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right'};
+window.addEventListener('keydown',e => {
+  const d=KEYS[e.code];
+  if(overlay==='title'){ if(e.code==='Enter'||e.code==='Space'){ e.preventDefault(); startGame(); } return; }
+  if(overlay){
+    if(e.code==='Escape' || (d && overlay!=='win')){ e.preventDefault(); if(overlay!=='win') closeOverlay(); }
+    if(e.code==='Space') e.preventDefault();
+    return;
+  }
+  if(d){ e.preventDefault(); if(!held.includes(d)) held.push(d); return; }
+  if((e.code==='Space'||e.code==='Enter') && mode==='gen'){ e.preventDefault(); skip(); }
+  if(e.code==='KeyM') toggleMusic();
+  if(e.code==='KeyP'||e.code==='KeyJ'){ Stats.event('open-log','Opened the treasure log'); openJournal(); }
+});
+window.addEventListener('keyup',e => { const d=KEYS[e.code]; if(d){ const i=held.indexOf(d); if(i>=0) held.splice(i,1); } });
+window.addEventListener('blur',() => held.length=0);
+document.querySelectorAll('#dpad button').forEach(b => {
+  const d=b.dataset.dir;
+  const on=e => { e.preventDefault(); if(overlay) return; if(!held.includes(d)) held.push(d); try{ b.setPointerCapture(e.pointerId); }catch(_){} };
+  const off=() => { const i=held.indexOf(d); if(i>=0) held.splice(i,1); };
+  b.addEventListener('pointerdown',on); ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>b.addEventListener(ev,off));
+});
+function enableTouch(){ document.body.classList.add('touch'); setHint(); }
+function setHint(){
+  hint.innerHTML = document.body.classList.contains('touch')
+    ? 'USE THE PAD TO MOVE<br>OPEN CHESTS TO FIND MY WORK'
+    : 'ARROWS / WASD TO MOVE<br>OPEN THE GOLD CHESTS';
+}
+setHint();
+if(window.matchMedia && matchMedia('(pointer:coarse)').matches) enableTouch();
+window.addEventListener('touchstart',enableTouch,{once:true,passive:true});
+
+function skip(){ if(mode==='gen' && !attract && genT<total-HOLD) genT=total-HOLD; }
+function toggleSound(){ SFX.init(); SFX.resume(); const on=SFX.toggle(); soundBtn.textContent='SOUND '+(on?'ON':'OFF'); if(on) SFX.ui(); }
+soundBtn.textContent='SOUND '+(SFX.isOn()?'ON':'OFF');
+const musicBtn=$('musicBtn');
+function toggleMusic(){ SFX.init(); SFX.resume(); Music.init(SFX.ctx(),SFX.out()); const on=Music.toggle(); musicBtn.textContent='MUSIC '+(on?'ON':'OFF'); if(!on) Stats.event('music-off','Turned music off'); }
+musicBtn.textContent='MUSIC '+(Music.isOn()?'ON':'OFF');
+musicBtn.addEventListener('click',() => { toggleMusic(); musicBtn.blur(); });
+soundBtn.addEventListener('click',() => { toggleSound(); soundBtn.blur(); });
+skipBtn.addEventListener('click',() => { skip(); skipBtn.blur(); });
+journalBtn.addEventListener('click',() => { journalBtn.blur(); Stats.event('open-log','Opened the treasure log'); openJournal(); });
+$('playBtn').addEventListener('click',startGame);
+$('cClose').addEventListener('click',() => closeOverlay());
+$('jClose').addEventListener('click',() => closeOverlay());
+$('jReveal').addEventListener('click',() => { revealAll=true; Stats.event('reveal-all','Pressed REVEAL ALL'); openJournal(); });
+$('jNew').addEventListener('click',() => { closeOverlay(); startFade(() => { floorN=1; gems=0; runTime=0; won=false; genSpeed=1; newLevel(randSeed()); }); });
+$('wShare').addEventListener('click',share);
+$('wMore').addEventListener('click',() => { closeOverlay(); startFade(() => { floorN++; genSpeed=2.2; newLevel(randSeed()); }); });
+document.querySelectorAll('.overlay').forEach(o => o.addEventListener('pointerdown',e => { if(e.target===o && (overlay==='card'||overlay==='journal')) closeOverlay(); }));
+
+/* ---------------- gameplay ---------------- */
+function tryMove(dir){
+  if(player.bump>0) return;
+  const [dx,dy]=DIRV[dir]; if(dx) player.face=dx>0?'r':'l';
+  const nx=player.x+dx, ny=player.y+dy, d=L.decor.get(L.I(nx,ny)), v=L.G(nx,ny);
+  if(d && d.block){
+    if(d.type==='chest' && !d.open){
+      d.open=true; gems+=3; SFX.chest();
+      if(d.project){
+        found.add(d.project.title); store.set('sh-found',[...found]);
+        Stats.event(`chest-${d.project.id}`,`Opened chest: ${d.project.title}`);
+        burst(nx*T+8,ny*T+7,22,[C.gold,C.goldLight,C.crystal0,C.flame1]);
+        const p=d.project; setTimeout(()=>showProject(p),420);
+        journalBtn.classList.remove('pulse'); void journalBtn.offsetWidth; journalBtn.classList.add('pulse');
+      } else { burst(nx*T+8,ny*T+7,14,[C.sand0,C.flame1,C.crystal0]); toast('+3 CRYSTALS'); }
+      updateHud();
+    } else if(time-lastBump>0.45){ SFX.bump(); lastBump=time; }
+    player.bump=0.14; player.bdx=dx; player.bdy=dy; return;
+  }
+  if(v!==FLOOR && v!==BRIDGE){ if(time-lastBump>0.45){ SFX.bump(); lastBump=time; } player.bump=0.12; player.bdx=0; player.bdy=0; return; }
+  Object.assign(player,{fx:player.x,fy:player.y,tx:nx,ty:ny,t:0,moving:true,frame:player.frame^1});
+  SFX.step(v===BRIDGE);
+  if(!moved){ moved=true; hint.classList.add('hidden'); }
+}
+function arrive(){
+  const i=L.I(player.x,player.y), d=L.decor.get(i);
+  if(d && d.type==='crystal'){ L.decor.delete(i); gems++; SFX.gem(); burst(player.x*T+8,player.y*T+7,10,[C.crystal0,C.waterHi,C.crystal2]); updateHud(); }
+  if(player.x===L.stairs.x && player.y===L.stairs.y){
+    SFX.stairs(); Music.duck(1.4);
+    if(floorN===CONFIG.floorsToWin && !won){ won=true; setTimeout(showWin,450); return; }
+    if(floorN<CONFIG.floorsToWin) Stats.event(`reached-floor-${floorN+1}`,`Reached floor ${floorN+1}`);
+    startFade(() => { floorN++; genSpeed=2.2; newLevel(randSeed()); });
+  }
+}
+function burst(x,y,n,cols){
+  for(let i=0;i<n;i++){ const a=Math.random()*Math.PI*2, sp=18+Math.random()*42;
+    parts.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-34,life:0.5+Math.random()*0.5,c:cols[i%cols.length]}); }
+}
+function playerPos(){ const e=player.t; return [player.fx+(player.tx-player.fx)*e, player.fy+(player.ty-player.fy)*e]; }
+function camTarget(){
+  const [rx,ry]=playerPos(), mw=MW*T, mh=MH*T;
+  let tx=rx*T+8-iw/2, ty=ry*T+8-ih/2;
+  tx = mw>iw ? Math.max(0,Math.min(mw-iw,tx)) : (mw-iw)/2;
+  ty = mh>ih ? Math.max(0,Math.min(mh-ih,ty)) : (mh-ih)/2;
+  return [tx,ty];
+}
+function genSounds(dt){
+  const {p,u}=phaseAt(genT);
+  if(p!==genSfx.p){ genSfx.p=p; genSfx.n=0; if(p===4) SFX.flood(); if(p===phases.length) SFX.ready(); }
+  let n=-1;
+  if(p===0) n=Math.min(L.rooms.length,1+Math.floor(u*L.rooms.length));
+  if(p===1) n=Math.floor(u*L.cand.length);
+  if(p===2) n=Math.floor(Math.min(1,u/0.7)*L.tree.length)+Math.floor(clamp01((u-0.7)/0.3)*L.extra.length);
+  if(n>genSfx.n){ genSfx.n=n; p===0 ? SFX.room(n) : SFX.link(p===2?1:0); }
+  if(p===3){ genSfx.dig-=dt; if(genSfx.dig<=0){ SFX.dig(); genSfx.dig=0.07; } }
+}
+
+function update(dt){
+  if(fade){
+    fade.t+=dt;
+    if(!fade.done && fade.t>=0.35){ fade.done=true; fade.mid(); }
+    if(fade.t>=0.8) fade=null;
+  }
+  if(toastT>0){ toastT-=dt; if(toastT<=0) toastEl.classList.add('hidden'); }
+  if(mode==='gen'){
+    if(!fade){
+      genT+=dt*1000*(attract?1.5:genSpeed);
+      if(genT>=total) startFade(attract ? () => newLevel(randSeed()) : enterPlay);
+    }
+    if(!attract){
+      genSounds(dt);
+      const {p}=phaseAt(genT);
+      if(p<phases.length) setCaption(`STEP ${p+1}/5 · ${phases[p].name}`,phases[p].stat);
+      else setCaption(`FLOOR ${floorN} READY`,'ENTERING...');
+    }
+  } else {
+    if(!overlay) runTime+=dt;
+    if(player.bump>0) player.bump-=dt;
+    if(player.moving){
+      player.t+=dt/STEP;
+      if(player.t>=1){ player.t=1; player.moving=false; player.x=player.tx; player.y=player.ty; arrive(); }
+    }
+    if(!player.moving && !fade && !overlay && held.length) tryMove(held[held.length-1]);
+    const [tx,ty]=camTarget(), k=Math.min(1,dt*7);
+    cam.x+=(tx-cam.x)*k; cam.y+=(ty-cam.y)*k;
+    if(L.pools){ dripT-=dt; if(dripT<=0){ SFX.drip(); dripT=2+Math.random()*4; } }
+  }
+  for(const p of parts){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=70*dt; p.life-=dt; }
+  parts=parts.filter(p=>p.life>0);
+}
+
+/* ---------------- drawing: generation overview ---------------- */
+function pixLine(x0,y0,x1,y1,col){
+  x0|=0; y0|=0; x1|=0; y1|=0; ctx.fillStyle=col;
+  const dx=Math.abs(x1-x0), sx=x0<x1?1:-1, dy=-Math.abs(y1-y0), sy=y0<y1?1:-1; let e=dx+dy;
+  for(;;){ ctx.fillRect(x0,y0,1,1); if(x0===x1&&y0===y1) break; const e2=2*e; if(e2>=dy){ e+=dy; x0+=sx; } if(e2<=dx){ e+=dx; y0+=sy; } }
+}
+function drawGen(){
+  const {p,u}=phaseAt(genT), rooms=L.rooms;
+  R(ctx,0,0,iw,ih,C.void);
+  const top=attract?8:Math.ceil(120/scale), bot=Math.ceil(30/scale), avH=Math.max(10,ih-top-bot);
+  const s=Math.max(2,Math.floor(Math.min((iw-12)/MW,avH/MH)));
+  const W=MW*s, H=MH*s, ox=(iw-W)>>1, oy=top+Math.max(0,(avH-H)>>1);
+  R(ctx,ox-3,oy-3,W+6,H+6,'#1b2131'); R(ctx,ox-2,oy-2,W+4,H+4,'#0f131d');
+  for(let y=0;y<MH;y+=2) for(let x=0;x<MW;x+=2) R(ctx,ox+x*s,oy+y*s,1,1,'#1a2232');
+  const cpt=r=>[ox+(r.cx+1)*s, oy+(r.cy+1)*s];
+  const edge=(e,t,col)=>{ const [a1,a2]=cpt(rooms[e.a]), [b1,b2]=cpt(rooms[e.b]); pixLine(a1,a2,a1+(b1-a1)*t,a2+(b2-a2)*t,col); };
+  const roomRect=(r,edgeCol)=>{ R(ctx,ox+r.x*s,oy+r.y*s,r.w*s,r.h*s,C.floor); outline(ctx,ox+r.x*s,oy+r.y*s,r.w*s,r.h*s,edgeCol); };
+
+  if(p<=3){
+    if(p===3){
+      const n=Math.floor(u*L.carved.length/2);
+      for(let i=0;i<n;i++) R(ctx,ox+L.carved[i*2]*s,oy+L.carved[i*2+1]*s,s,s,i>n-16?C.waterHi:C.floor);
+    }
+    const nR = p===0 ? Math.min(rooms.length,1+Math.floor(u*rooms.length)) : rooms.length;
+    for(let i=0;i<nR;i++) roomRect(rooms[i],(p===0&&i===nR-1)?C.waterHi:C.floorLight);
+    if(p===1){ const n=u*L.cand.length; for(let i=0;i<L.cand.length&&i<n;i++) edge(L.cand[i],Math.min(1,n-i),C.chain); }
+    if(p===2){
+      L.cand.forEach(e=>edge(e,1,'#2f3d5a'));
+      const nt=Math.min(1,u/0.7)*L.tree.length; for(let i=0;i<L.tree.length&&i<nt;i++) edge(L.tree[i],Math.min(1,nt-i),C.waterHi);
+      const ne=clamp01((u-0.7)/0.3)*L.extra.length; for(let i=0;i<L.extra.length&&i<ne;i++) edge(L.extra[i],Math.min(1,ne-i),C.sand0);
+    }
+    if(p===3){ ctx.globalAlpha=clamp01(1-u*1.6); L.tree.forEach(e=>edge(e,1,C.waterHi)); L.extra.forEach(e=>edge(e,1,C.sand0)); ctx.globalAlpha=1; }
+    if(p===1||p===2) rooms.forEach(r=>{ const [x,y]=cpt(r); R(ctx,x-1,y-1,3,3,C.sand0); });
+  } else {
+    const uu = p===4 ? u : 1;
+    const wa=clamp01(uu/0.35), aa=clamp01((uu-0.25)/0.35), da=clamp01((uu-0.55)/0.35);
+    for(let y=0;y<MH;y++) for(let x=0;x<MW;x++){
+      const v=L.G(x,y); if(v===VOID) continue; const X=ox+x*s, Y=oy+y*s;
+      if(v===WALL){ if(wa>0){ ctx.globalAlpha=wa; R(ctx,X,Y,s,s,isOpen(L.G(x,y+1))?'#3a4764':'#242c40'); ctx.globalAlpha=1; } continue; }
+      R(ctx,X,Y,s,s,C.floor);
+      if(v===WATER&&aa>0){ ctx.globalAlpha=aa; R(ctx,X,Y,s,s,C.water); ctx.globalAlpha=1; }
+      if(v===BRIDGE&&aa>0){ ctx.globalAlpha=aa; R(ctx,X,Y,s,s,C.stoneLight); ctx.globalAlpha=1; }
+    }
+    if(da>0){
+      ctx.globalAlpha=da; const d=Math.max(1,s-2), o=(s-d)>>1;
+      L.decor.forEach(dd => {
+        if(dd.type==='chest' && dd.project){ R(ctx,ox+dd.x*s-1,oy+dd.y*s-1,s+2,s+2,C.gold); return; }
+        const col={crystal:C.crystal0,chest:C.sand0,brazier:C.flame1}[dd.type]; if(col) R(ctx,ox+dd.x*s+o,oy+dd.y*s+o,d,d,col);
+      });
+      L.wallDecor.forEach((t,i) => { if(t==='torch') R(ctx,ox+(i%MW)*s+o,oy+((i/MW)|0)*s+o,d,d,C.flame2); });
+      const blink=Math.floor(time*4)%2===0;
+      R(ctx,ox+L.stairs.x*s-1,oy+L.stairs.y*s-1,s+2,s+2,blink?C.waterHi:C.flame2);
+      R(ctx,ox+L.start.x*s-1,oy+L.start.y*s-1,s+2,s+2,'#d9792f');
+      ctx.globalAlpha=1;
+    }
+  }
+}
+
+/* ---------------- drawing: play view ---------------- */
+function flame(cx,by,ph){
+  const f=Math.floor(time*9+ph*7)%4, hgt=[6,7,6,8][f], Wd=[5,5,5,3,3,3,1,1];
+  for(let i=0;i<hgt;i++){
+    const w=Wd[i], j=i>2?[0,1,0,-1][(f+i)%4]:0, x=cx-(w>>1)+j, y=by-1-i;
+    R(ctx,x,y,w,1,C.flame2);
+    if(w>=3&&i<hgt-1) R(ctx,x+1,y,w-2,1,C.flame1);
+    if(w>=5&&i>0&&i<3) R(ctx,x+2,y,1,1,C.flame0);
+  }
+  if(f===1||f===3) R(ctx,cx+(f===1?1:-1),by-hgt-2,1,1,C.flame1);
+}
+function drawCrystal(d,sx,sy){
+  const bob=Math.round(Math.sin(time*2.4+d.ph)), X=sx, Y=sy+bob;
+  const c0=d.blue?C.crystal2:C.crystal0, c1=d.blue?C.crystal3:C.crystal1, hi=d.blue?'#a8c8ff':'#ffffff';
+  R(ctx,sx+4,sy+13,8,2,'rgba(10,20,40,0.28)');
+  R(ctx,X+7,Y+3,2,1,c0); R(ctx,X+6,Y+4,4,7,c0); R(ctx,X+8,Y+4,2,7,c1); R(ctx,X+7,Y+11,2,1,c1); R(ctx,X+7,Y+4,1,3,hi);
+  R(ctx,X+4,Y+7,2,1,c0); R(ctx,X+3,Y+8,3,4,c0); R(ctx,X+5,Y+8,1,4,c1);
+  R(ctx,X+11,Y+6,2,1,c1); R(ctx,X+10,Y+7,3,5,c0); R(ctx,X+12,Y+7,1,5,c1);
+  R(ctx,X+3,Y+12,10,1,'#2a3a5a');
+  if(Math.sin(time*3+d.ph*5)>0.85){ R(ctx,X+11,Y+2,1,3,'#fff'); R(ctx,X+10,Y+3,3,1,'#fff'); }
+}
+function drawChest(d,X,Y){
+  const band = d.project ? C.gold : '#7f93c0', lid = d.project ? '#4a4f7a' : '#41507a', lidHi = d.project ? C.goldLight : '#5f71a3';
+  R(ctx,X+2,Y+14,12,2,'rgba(0,0,0,0.25)');
+  if(!d.open){
+    R(ctx,X+2,Y+5,12,9,'#10141f');
+    R(ctx,X+3,Y+6,10,3,lid); R(ctx,X+3,Y+6,10,1,lidHi);
+    R(ctx,X+3,Y+9,10,4,'#2a3354'); R(ctx,X+3,Y+9,10,1,'#1a2036');
+    R(ctx,X+4,Y+6,1,7,band); R(ctx,X+11,Y+6,1,7,band);
+    R(ctx,X+7,Y+8,2,3,d.project?'#fff3d6':C.sand0); R(ctx,X+7,Y+10,2,1,C.sand2);
+    if(d.project){   // floating marker so project chests read from across the room
+      const b=Math.round(Math.sin(time*3.4)*1.5), mx=X+7, my=Y-5+b;
+      R(ctx,mx,my-2,2,1,C.goldLight); R(ctx,mx-1,my-1,4,1,C.gold); R(ctx,mx-1,my,4,1,C.gold); R(ctx,mx,my+1,2,1,'#c7782c');
+    }
+  } else {
+    R(ctx,X+2,Y+2,12,12,'#10141f');
+    R(ctx,X+3,Y+3,10,3,lid); R(ctx,X+3,Y+3,10,1,lidHi);
+    R(ctx,X+3,Y+6,10,3,'#07090f'); R(ctx,X+5,Y+7,6,1,d.project?C.gold:C.waterHi);
+    R(ctx,X+3,Y+9,10,4,'#2a3354'); R(ctx,X+3,Y+9,10,1,lidHi);
+    R(ctx,X+4,Y+9,1,4,band); R(ctx,X+11,Y+9,1,4,band);
+  }
+}
+function drawStairArrow(sx,sy){
+  const b=Math.round(Math.sin(time*3.2)*1.5), x=sx+5, y=sy-8+b;
+  for(let k=0;k<3;k++){ R(ctx,x+k,y+k,2,1,C.waterHi); R(ctx,x+5-k,y+k,2,1,C.waterHi); }
+  R(ctx,x+3,y+3,1,1,C.waterHi);
+}
+function drawPlayer(px,py){
+  px=Math.round(px); py=Math.round(py);
+  const bx=player.bump>0?player.bdx:0, by=player.bump>0?player.bdy:0;
+  R(ctx,px+4,py+13,8,2,'rgba(6,10,22,0.35)');
+  const bob=player.moving&&player.t<0.5?-1:0;
+  ctx.drawImage(SPR[player.face][player.moving?player.frame:0],px+bx,py-1+bob+by);
+}
+function hole(x,y,r,a){ const g=lx.createRadialGradient(x,y,0,x,y,r); g.addColorStop(0,`rgba(0,0,0,${a})`); g.addColorStop(1,'rgba(0,0,0,0)'); lx.fillStyle=g; lx.fillRect(x-r,y-r,r*2,r*2); }
+function glow(x,y,r,rgb,a){ const g=ctx.createRadialGradient(x,y,0,x,y,r); g.addColorStop(0,`rgba(${rgb},${a})`); g.addColorStop(1,`rgba(${rgb},0)`); ctx.fillStyle=g; ctx.fillRect(x-r,y-r,r*2,r*2); }
+
+function drawPlay(){
+  const cx=Math.round(cam.x), cy=Math.round(cam.y), G=L.G;
+  R(ctx,0,0,iw,ih,C.void);
+  ctx.drawImage(mc,-cx,-cy);
+  const x0=Math.max(0,Math.floor(cx/T)-1), y0=Math.max(0,Math.floor(cy/T)-1);
+  const x1=Math.min(MW-1,Math.floor((cx+iw)/T)+1), y1=Math.min(MH-1,Math.floor((cy+ih)/T)+1);
+  const list=[], warm=[];
+  for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
+    const v=G(x,y), sx=x*T-cx, sy=y*T-cy, i=y*MW+x;
+    if(v===WATER){   // moving ripples and sparkles
+      const h=hash(x,y,77), n=G(x,y-1), top=n===FLOOR?7:n===BRIDGE?4:1;
+      const ox=Math.floor(h*13+time*4)%13, oy=top+Math.floor(h*97)%(15-top);
+      R(ctx,sx+ox+1,sy+oy,2,1,C.waterLight);
+      if(Math.sin(time*2.6+h*40)>0.88) R(ctx,sx+1+Math.floor(h*131)%14,sy+top+Math.floor(h*53)%(15-top),1,1,C.foam);
+      if(n===FLOOR) R(ctx,sx+Math.floor(time*6+h*16)%16,sy+4,1,1,'#ffffff');
+    }
+    const d=L.decor.get(i);
+    if(d && (d.type==='crystal'||d.type==='chest'||d.type==='brazier')){
+      list.push({k:y,d,sx,sy});
+      if(d.type==='chest' && d.project && !d.open) warm.push([sx+8,sy+8]);
+    }
+    if(L.wallDecor.get(i)==='torch') list.push({k:y-0.5,torch:true,sx,sy,ph:hash(x,y,5)*10});
+  }
+  const st=L.stairs; list.push({k:st.y+0.05,stairs:true,sx:st.x*T-cx,sy:st.y*T-cy});
+  const [rx,ry]=playerPos(); list.push({k:ry+0.1,player:true});
+  list.sort((a,b)=>a.k-b.k);
+  for(const o of list){
+    if(o.player) drawPlayer(rx*T-cx,ry*T-cy);
+    else if(o.torch) flame(o.sx+8,o.sy+9,o.ph);
+    else if(o.stairs) drawStairArrow(o.sx,o.sy);
+    else if(o.d.type==='crystal') drawCrystal(o.d,o.sx,o.sy);
+    else if(o.d.type==='chest') drawChest(o.d,o.sx,o.sy);
+    else flame(o.sx+8,o.sy+7,o.d.ph);
+  }
+
+  // lighting: a dim veil with soft holes around the player, flames and project chests
+  lx.globalCompositeOperation='source-over'; lx.clearRect(0,0,iw,ih);
+  lx.fillStyle='rgba(4,7,18,0.42)'; lx.fillRect(0,0,iw,ih);
+  lx.globalCompositeOperation='destination-out';
+  const pcx=rx*T-cx+8, pcy=ry*T-cy+8;
+  hole(pcx,pcy,Math.max(100,Math.min(iw,ih)*0.6),1);
+  for(const l of L.lights){ const x=l.x-cx, y=l.y-cy; if(x<-70||y<-70||x>iw+70||y>ih+70) continue; hole(x,y,l.r+Math.sin(time*7+l.ph*3)*2,0.9); }
+  for(const [x,y] of warm) hole(x,y,40,0.9);
+  lx.globalCompositeOperation='source-over';
+  ctx.drawImage(lc,0,0);
+  ctx.globalCompositeOperation='lighter';
+  for(const l of L.lights){ const x=l.x-cx, y=l.y-cy; if(x<-40||y<-40||x>iw+40||y>ih+40) continue; glow(x,y,l.g+Math.sin(time*6+l.ph)*1.5,'110,190,255',0.22); }
+  for(const [x,y] of warm) glow(x,y,22+Math.sin(time*4)*2,'255,190,110',0.28);
+  glow(pcx+(player.face==='r'?6:-6),pcy+3,12,'255,214,140',0.22);
+  ctx.globalCompositeOperation='source-over';
+
+  for(const p of parts){ ctx.globalAlpha=clamp01(p.life*1.8); R(ctx,Math.round(p.x-cx),Math.round(p.y-cy),1,1,p.c); }
+  ctx.globalAlpha=1;
+}
+
+function draw(){
+  if(mode==='gen') drawGen(); else drawPlay();
+  if(fade){ const t=fade.t, a=t<0.35?t/0.35:1-(t-0.35)/0.45; R(ctx,0,0,iw,ih,`rgba(6,8,14,${clamp01(a)})`); }
+}
+
+/* ---------------- go ---------------- */
+setupTitle();
+newLevel(randSeed());          // the title screen plays generation on a loop behind it
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(0.05,(now-last)/1000); last=now; time+=dt;
+  update(dt); draw(); requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// small hook for automated tests; harmless in production
+window.__dungeon = { get level(){ return L; }, get mode(){ return mode; }, get overlay(){ return overlay; }, skip, player, generate, startGame, Music };
+})();
+</script>
+</body>
+</html>
